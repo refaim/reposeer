@@ -3,6 +3,7 @@
 
 __author__ = 'Roman Kharitonov'
 __authoremail__ = 'refaim.vl@gmail.com'
+__url__ = 'http://github.com/refaim/reposeer'
 __longappname__ = 'Reposeer'
 __shortappname__ = 'rs'
 __version__ = 0.5
@@ -101,11 +102,11 @@ def main(argv):
     config.dest = os.path.abspath(second(args)).decode(config.encoding)
 
     if not os.path.isfile(options.filename):
-        return error(u'нет такого файла', options.filename)
+        return error(u'не найден файл', options.filename)
     if not os.path.isdir(config.source):
-        return error(u'нет такой директории', config.source)
+        return error(u'не найдена директория', config.source)
     if not os.path.isdir(config.dest):
-        return error(u'нет такой директории', config.dest)
+        return error(u'не найдена директория', config.dest)
 
     if not os.access(config.source, os.R_OK):
         return error(u'доступ на чтение запрещён', config.source)

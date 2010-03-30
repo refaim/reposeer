@@ -13,6 +13,7 @@ setup(
     console = [app.__shortappname__ + '.py'],
     name = app.__longappname__,
     author = app.__author__,
-    author_email = app.__authoremail__
+    author_email = app.__authoremail__,
+    url = app.__url__
 )
 
