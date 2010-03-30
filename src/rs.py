@@ -93,7 +93,7 @@ def main(argv):
         return error(e.msg)
 
     if empty(args):
-        print(parser.format_help()[:-1].replace('Options', u'Опции').encode(config.encoding))
+        print(parser.format_help()[:-1].replace('Options', u'Опции'))
         return 0
     if len(args) != 2:
         return error(u'неправильное число аргументов: {0} вместо двух'.format(len(args)))
