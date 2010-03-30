@@ -1,4 +1,5 @@
 #!/bin/sh
 chmod u+x spc.py
-ln -s $PWD/src/spc.py /bin/spc
+ln -s $PWD/rs.py /usr/bin/rs
+
 
