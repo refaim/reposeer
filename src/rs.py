@@ -1,12 +1,14 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+from const import APP_VERSION
+
 __author__ = 'Roman Kharitonov'
 __authoremail__ = 'refaim.vl@gmail.com'
 __url__ = 'http://github.com/refaim/reposeer'
 __longappname__ = 'Reposeer'
 __shortappname__ = 'rs'
-__version__ = 0.5
+__version__ = APP_VERSION
 __versionstring__ = '{0} {1}\nby {2} ({3})'.format(
     __longappname__, __version__, __author__, __authoremail__)
 
@@ -19,11 +21,18 @@ import os
 import shutil
 import csv
 import hashlib
+import locale
 
 from common import *
-from config import Config
 from pbar import ProgressBar, convert_bytes
 from cmd import OptionParser, OptionFormatter, OptionError
+
+class Config(object):
+    def __init__(self):
+        #locale.setlocale(locale.LC_ALL, '')
+        self.encoding = locale.getpreferredencoding()
+        self.source = None
+        self.dest = None
 
 config = Config()
 
