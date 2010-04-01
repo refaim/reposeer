@@ -34,7 +34,7 @@ def md5hash(path):
                 hobj.update(block)
                 block = fobject.read(MD5_READ_BLOCK_SIZE)
     except IOError as e:
-        raise FatalError(u'ошибка при чтении файла {0}: {1!s}'.format(path, e))
+        raise FatalError(u'Ошибка при чтении файла {0}: {1!s}'.format(path, e))
     return hobj.hexdigest().lower()
 
 def loadlibgen(csvname):
@@ -75,7 +75,7 @@ def loadlibgen(csvname):
 
             pbar.finish()
     except Exception as e:
-        raise FatalError(u'не удалось загрузить CSV-файл: {0!s}'.format(e))
+        raise FatalError(u'Не удалось загрузить CSV-файл: {0!s}'.format(e))
 
     return library
 
@@ -108,10 +108,10 @@ def main(argv):
     if empty(args) or options.help:
         return usage()
     if len(args) != 2:
-        return error(u'количество аргументов не равно двум (источник и приёмник)')
+        return error(u'Количество аргументов не равно двум (источник и приёмник)')
 
     if options.method not in config.methods:
-        return error(u'неверный аргумент у опции --method')
+        return error(u'Неверный аргумент у опции --method')
     if config.methods[options.method] is None:
         return error(config.method_errors[options.method])
 
@@ -123,16 +123,16 @@ def main(argv):
     if not os.path.isfile(options.filename):
         return error(u'CSV-файл {0} не найден'.format(options.filename))
     if not os.path.isdir(config.source):
-        return error(u'директория {0} не найдена'.format(config.source))
+        return error(u'Директория {0} не найдена'.format(config.source))
     if not os.path.isdir(config.dest):
-        return error(u'директория {0} не найдена'.format(config.dest))
+        return error(u'Директория {0} не найдена'.format(config.dest))
 
     if not os.access(config.source, os.R_OK):
-        return error(u'недостаточно прав для чтения из ' + config.source)
+        return error(u'Недостаточно привилегий для чтения из ' + config.source)
     if (options.method == M_MOVE or options.remove_empty) and not os.access(config.source, os.W_OK):
-        return error(u'недостаточно прав для записи в ' + config.source)
+        return error(u'Недостаточно привилегий для записи в ' + config.source)
     if not os.access(config.dest, os.W_OK):
-        return error(u'недостаточно прав для записи в ' + config.dest)
+        return error(u'Недостаточно привилегий для записи в ' + config.dest)
 
     try:
         # загружаем базу
@@ -145,7 +145,7 @@ def main(argv):
 
         def process(source, dest):
             ''' Обрабатываем (копируем, перемещаем и т.д.) файл '''
-            errmsg = u'ошибка при обработке файла {0}'.format(source) + u': {0!s}'
+            errmsg = u'Ошибка при обработке файла {0}'.format(source) + u': {0!s}'
             try:
                 source = os.path.join(config.source, source)
                 dest = os.path.join(config.dest, dest)
