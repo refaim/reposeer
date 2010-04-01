@@ -3,6 +3,8 @@
 
 import sys
 
+from common import bytes_to_human
+
 class ProgressBar(object):
     def __init__(self, maxval, fout=sys.stderr, width=50, displaysize=False):
         self.curval, self.maxval = 0, maxval
@@ -12,7 +14,7 @@ class ProgressBar(object):
 
     def update(self, value):
         assert value <= self.maxval 
-        assert self.curval + value <= self.maxval
+        assert (self.curval + value) <= self.maxval
         self.curval += value
         self._write()
 
@@ -35,8 +37,8 @@ class ProgressBar(object):
     def _getsizestr(self):
         fmt = u'[{cur} / {max}]'
         return fmt.format(
-            cur = convert_bytes(self.curval),
-            max = convert_bytes(self.maxval))
+            cur = bytes_to_human(self.curval),
+            max = bytes_to_human(self.maxval))
 
     def _write(self):
         line = u'[{bar}] {prc}%'.format(
@@ -59,18 +61,3 @@ class ProgressBar(object):
 
     def percentage(self):
         return int(self.curval / float(self.maxval) * 100.0)
-
-def convert_bytes(bytes):
-    bounds = { 1024 ** 5: u'Пбайт',
-               1024 ** 4: u'Тбайт',
-               1024 ** 3: u'Гбайт',
-               1024 ** 2: u'Мбайт',
-               1024:      u'Кбайт',
-               0:         u'байт' }
-
-    bytes = float(bytes)
-    for bound in sorted(bounds.keys(), reverse=True):
-        if bytes >= bound:
-            if bound != 0:
-                bytes = bytes / bound
-            return u'{0:.2f} {1}'.format(bytes, bounds[bound])

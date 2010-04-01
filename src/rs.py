@@ -1,17 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-from const import APP_VERSION
-
-__author__ = 'Roman Kharitonov'
-__authoremail__ = 'refaim.vl@gmail.com'
-__url__ = 'http://github.com/refaim/reposeer'
-__longappname__ = 'Reposeer'
-__shortappname__ = 'rs'
-__version__ = APP_VERSION
-__versionstring__ = '{0} {1}\nby {2} ({3})'.format(
-    __longappname__, __version__, __author__, __authoremail__)
-
 MD5_READ_BLOCK_SIZE = 1048576
 CSV_LOAD_DISPLAY_RATE = 10000
 CHECK_PROGRESS_DIVIDER = 300.0
@@ -23,71 +12,88 @@ import csv
 import hashlib
 import locale
 
+from const import *
 from common import *
-from pbar import ProgressBar, convert_bytes
+from pbar import ProgressBar
 from cmd import OptionParser, OptionFormatter, OptionError
 
 class Config(object):
     def __init__(self):
-        #locale.setlocale(locale.LC_ALL, '')
         self.encoding = locale.getpreferredencoding()
         self.source = None
         self.dest = None
 
 config = Config()
 
-class GError(Exception):
+class FatalError(Exception):
     def __init__(self, msg):
         self.msg = msg
 
-def error(message, fname=None):
-    message = u'{0}: {1}'.format(__shortappname__, message)
-    if fname is not None:
-        message += u': {0}'.format(fname)
+def error(message):
+    message = u'{0}: {1}'.format(APP_SHORT_NAME, message)
     print(message)
-    return 2
+    return 1
 
 def md5hash(path):
-    with open(path, 'rb') as fobject:
-        hobj = hashlib.md5()
-        block = fobject.read(MD5_READ_BLOCK_SIZE)
-        while nonempty(block):
-            hobj.update(block)
+    ''' Считает md5-хеш файла и возвращает его строковое представление в нижнем регистра '''
+    try:
+        with open(path, 'rb') as fobject:
+            hobj = hashlib.md5()
             block = fobject.read(MD5_READ_BLOCK_SIZE)
+            while nonempty(block):
+                hobj.update(block)
+                block = fobject.read(MD5_READ_BLOCK_SIZE)
+    except IOError as e:
+        raise FatalError(u'ошибка при чтении файла {0}: {1!s}'.format(path, e))
     return hobj.hexdigest().lower()
 
 def loadlibgen(csvname):
-    library = {}
+    ''' Загружает в память csv-файл с базой Library Genesis и возвращает словарь,
+    где ключ — md5-хеш файла (строка в нижнем регистре), а значение — кортеж (путь к файлу, размер файла) '''
 
-    with open(csvname) as csvfile:
-        pbar = ProgressBar(maxval=len(open(csvname).readlines()))
-        csvfile.seek(0)
-        data = csv.reader(csvfile, delimiter=',', quotechar='"')
-        try:
-            int(second(data.next()))
-        except ValueError:
-            pass
-        else:
+    try:
+        with open(csvname) as csvfile:
+            # инициализируем прогрессбар
+            pbar = ProgressBar(maxval=len(open(csvname).readlines()))
             csvfile.seek(0)
 
-        print(u'Загружаем в память базу Library Genesis...')
-        # (путь, размер, md5)
-        values = ((os.path.normpath(first(entry)), int(second(entry)), third(entry)) for entry in data)
-        try:
+            data = csv.reader(csvfile, delimiter=',', quotechar='"')
+            # определяем, есть ли в файле заголовок
+            # формат csv: путь, размер, md5
+            try:
+                # пытаемся преобразовать размер к целому числа
+                int(second(data.next()))
+            except ValueError:
+                # нашли заголовок, стоим уже на второй строке
+                pass
+            else:
+                # заголовка нет, идём обратно
+                csvfile.seek(0)
+
+            print(u'Загружаем в память базу Library Genesis...')
+
+            # заполняем словарь
+            library = {}
+            values = ((os.path.normpath(first(entry)), int(second(entry)), third(entry)) for entry in data)
             for name, size, md5 in values:
                 library[md5.lower()] = (name, size)
+
+                # если выводить прогресс на каждом шаге, получается очень медленно
+                # поэтому будем обновляться каждый CSV_LOAD_DISPLAY_RATE'ый шаг
                 if data.line_num % CSV_LOAD_DISPLAY_RATE == 0:
                     pbar.set(data.line_num)
+            
             pbar.finish()
-        except Exception as e:
-            raise GError(u'ошибка при загрузке csv: {0!s}'.format(e))
+    except Exception as e:
+        raise FatalError(u'не удалось загрузить CSV-файл: {0!s}'.format(e))
 
     return library
 
 def main(argv):
+    # инициализируем парсер опций командной строки
     parser_usage = u'%prog [опции] <источник> <приёмник>'
-    parser = OptionParser(parser_usage, version=__versionstring__, prog=__shortappname__,
-        formatter=OptionFormatter(__version__, __longappname__), add_help_option=False)
+    parser = OptionParser(parser_usage, version=APP_VERSION_STRING, prog=APP_SHORT_NAME,
+        formatter=OptionFormatter(APP_VERSION, APP_LONG_NAME), add_help_option=False)
     parser.disable_interspersed_args()
     parser.add_option('-h', '--help', action='help', help=u'показать это сообщение и выйти')
     parser.add_option('-c', '--csv', dest='filename', default='libgen.csv', help=u'путь к CSV-файлу')
@@ -105,84 +111,104 @@ def main(argv):
         print(parser.format_help()[:-1].replace('Options', u'Опции'))
         return 0
     if len(args) != 2:
-        return error(u'неправильное число аргументов: {0} вместо двух'.format(len(args)))
+        return error(u'количество аргументов не равно двум (источник и приёмник)')
 
+    # источник и приёмник
     config.source = os.path.abspath(first(args)).decode(config.encoding)
     config.dest = os.path.abspath(second(args)).decode(config.encoding)
 
+    # проверяем, все ли пути существуют
     if not os.path.isfile(options.filename):
-        return error(u'не найден файл', options.filename)
+        return error(u'CSV-файл {0} не найден'.format(options.filename))
     if not os.path.isdir(config.source):
-        return error(u'не найдена директория', config.source)
+        return error(u'директория {0} не найдена'.format(config.source))
     if not os.path.isdir(config.dest):
-        return error(u'не найдена директория', config.dest)
+        return error(u'директория {0} не найдена'.format(config.dest))
 
     if not os.access(config.source, os.R_OK):
-        return error(u'доступ на чтение запрещён', config.source)
+        return error(u'недостаточно прав для чтения из ' + config.source)
     if (options.move or options.remove_empty) and not os.access(config.source, os.W_OK):
-        return error(u'доступ на запись запрещён', config.source)
+        return error(u'недостаточно прав для записи в ' + config.source)
     if not os.access(config.dest, os.W_OK):
-        return error(u'доступ на запись запрещён', config.dest)
+        return error(u'недостаточно прав для записи в ' + config.dest)
 
     try:
+        # загружаем базу
         library = loadlibgen(options.filename) # library[md5] == (filename, size)
-        libsz = set(second(value) for value in library.values())
+        libsizes = set(second(value) for value in library.values())
 
         print(u'Оцениваем общий размер анализируемых файлов...')
         source_size = dirsize(config.source)
-        print(convert_bytes(source_size))
+        print(bytes_to_human(source_size))
 
         def process(source, dest):
-            source = os.path.join(config.source, source)
-            dest = os.path.join(config.dest, dest)
-            if not os.path.isdir(os.path.dirname(dest)):
-                os.makedirs(os.path.dirname(dest))
-            duplicate = os.path.isfile(dest)
-            if options.move:
-                shutil.move(source, dest)
-            else:    
-                shutil.copyfile(source, dest)
+            try:
+                source = os.path.join(config.source, source)
+                dest = os.path.join(config.dest, dest)
+                if not os.path.isdir(os.path.dirname(dest)):
+                    os.makedirs(os.path.dirname(dest))
+                duplicate = os.path.isfile(dest)
+                if options.move:
+                    shutil.move(source, dest)
+                else:    
+                    shutil.copyfile(source, dest)
+            except IOError:
+                raise FatalError(u'ошибка при обработке файла {0}: {1!s}'.format(source, e))
             return duplicate
-
+        
+        def remove_if_empty(path):
+            if options.remove_empty and dirsize(path) == 0:
+                shutil.rmtree(path)
+        
         print(u'Обрабатываем...')
-        processed_count, processed_size = 0, 0
-        added_count, added_size = 0, 0
-        dup_count, dup_size = 0, 0
 
+        class ProgressCounter(object):
+            def __init__(self):
+                self.count, self.size = 0, 0
+        
+        processed, added, duplicate = ProgressCounter(), ProgressCounter(), ProgressCounter()
+
+        # инициализируем индикатор прогресса
         pbar = ProgressBar(maxval=source_size, displaysize=True)
-        processed_size = 0
         delta = source_size / CHECK_PROGRESS_DIVIDER
+
         for path, dirs, files in os.walk(config.source):
             for file in files:
                 fullpath = os.path.join(path, file)
-                fsize = os.path.getsize(fullpath)
-                if fsize in libsz:
+                filesize = os.path.getsize(fullpath)
+        
+                # если в базе есть файл такого размера
+                if filesize in libsizes:
                     md5 = md5hash(fullpath)
+                    # и совпал по хешу
                     if md5 in library:
-                        isdup = process(fullpath, first(library[md5]))
-                        if isdup:
-                            dup_count += 1
-                            dup_size += fsize
+                        # то обрабатываем его
+                        isduplicate = process(fullpath, first(library[md5]))
+                        if isduplicate:
+                            duplicate.count += 1
+                            duplicate.size += filesize
                         else:
-                            added_count += 1
-                            added_size += fsize
-                processed_size += fsize
-                if processed_size >= delta:
-                    pbar.update(processed_size)
-                    processed_size = 0
-                processed_count += 1
-            if options.remove_empty and dirsize(path) == 0:
-                shutil.rmtree(path)
-        if options.remove_empty and dirsize(config.source) == 0:
-            shutil.rmtree(config.source)
+                            added.count += 1
+                            added.size += filesize
+                
+                processed.count += 1
+                processed.size += filesize
+                
+                # будем обновлять, только если накопилось достаточно файлов
+                if processed.size - pbar.curval >= delta:
+                    pbar.set(processed.size)
+
+            remove_if_empty(path)
+
+        remove_if_empty(config.source)
         pbar.finish()
 
-    except GError as e:
+    except FatalError as e:
         return error(e.msg)
 
-    print(u'Обработано: {0} ({1})'.format(processed_count, convert_bytes(source_size)))
-    print(u'Обнаружено дублей при добавлении: {0} ({1})'.format(dup_count, convert_bytes(dup_size)))
-    print(u'Добавлено в репозиторий: {0} ({1})'.format(added_count, convert_bytes(added_size)))
+    print(u'Обработано: {0} ({1})'.format(processed.count, bytes_to_human(processed.size)))
+    print(u'Обнаружено дублей при добавлении: {0} ({1})'.format(duplicate.count, bytes_to_human(duplicate.size)))
+    print(u'Добавлено в репозиторий: {0} ({1})'.format(added.count, bytes_to_human(added.size)))
 
     return 0
 

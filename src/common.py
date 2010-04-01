@@ -25,4 +25,19 @@ def dirsize(path):
     for path, dirs, files in os.walk(path):
         size += sum(os.path.getsize(os.path.join(path, file)) for file in files)
     return size
+
+def bytes_to_human(bytes):
+    bounds = { 1024 ** 5: u'Пбайт',
+               1024 ** 4: u'Тбайт',
+               1024 ** 3: u'Гбайт',
+               1024 ** 2: u'Мбайт',
+               1024:      u'Кбайт',
+               0:         u'байт' }
+
+    bytes = float(bytes)
+    for bound in sorted(bounds.keys(), reverse=True):
+        if bytes >= bound:
+            if bound != 0:
+                bytes = bytes / bound
+            return u'{0:.2f} {1}'.format(bytes, bounds[bound])
             
