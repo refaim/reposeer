@@ -90,26 +90,36 @@ def loadlibgen(csvname):
     return library
 
 def main(argv):
+ 
     # инициализируем парсер опций командной строки
     parser_usage = u'%prog [опции] <источник> <приёмник>'
     parser = OptionParser(parser_usage, version=APP_VERSION_STRING, prog=APP_SHORT_NAME,
         formatter=OptionFormatter(APP_VERSION, APP_LONG_NAME), add_help_option=False)
     parser.disable_interspersed_args()
-    parser.add_option('-h', '--help', action='help', help=u'показать это сообщение и выйти')
+
+    def usage():
+        # временное решение (пока нету gettext)
+        print(parser.format_help()[:-1].replace('Options', u'Опции'))
+        return 0
+    
+    parser.add_option('-h', '--help', action='store_true', dest='help', default=False, 
+        help=u'показать это сообщение и выйти')
     parser.add_option('-c', '--csv', dest='filename', default='libgen.csv', help=u'путь к CSV-файлу')
-    parser.add_option('-m', '--move', action='store_true', dest='move', default=False, 
-        help=u'не копировать, а перемещать файлы')
+    parser.add_option('-m', '--method', dest='method', default='copy', 
+        help=u'метод обработки файлов')
     parser.add_option('-r', '--remove-empty', action='store_true', dest='remove_empty', default=False,
         help=u'удалять пустые обработанные каталоги')
+    #parser.add_option('-m', '--move', action='store_true', dest='move', default=False, 
+    #    help=u'не копировать, а перемещать файлы')
 
     try:
         (options, args) = parser.parse_args()
     except OptionError as e:
         return error(e.msg)
 
-    if empty(args):
-        print(parser.format_help()[:-1].replace('Options', u'Опции'))
-        return 0
+
+    if empty(args) or options.help:
+        return usage()
     if len(args) != 2:
         return error(u'количество аргументов не равно двум (источник и приёмник)')
 
