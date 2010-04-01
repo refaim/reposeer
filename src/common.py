@@ -2,6 +2,10 @@
 
 import os
 
+class FatalError(Exception):
+    def __init__(self, msg):
+        self.msg = msg
+
 def first(seq):
     return seq[0] if seq else None
 
@@ -40,4 +44,3 @@ def bytes_to_human(bytes):
             if bound != 0:
                 bytes = bytes / bound
             return u'{0:.2f} {1}'.format(bytes, bounds[bound])
-            

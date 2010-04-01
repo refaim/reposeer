@@ -42,4 +42,3 @@ class OptionParser(optparse.OptionParser):
 
     def error(self, msg):
         raise OptionError(msg)
-    

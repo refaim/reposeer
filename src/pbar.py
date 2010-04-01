@@ -13,7 +13,7 @@ class ProgressBar(object):
         self.displaysize = displaysize
 
     def update(self, value):
-        assert value <= self.maxval 
+        assert value <= self.maxval
         assert (self.curval + value) <= self.maxval
         self.curval += value
         self._write()
@@ -50,7 +50,7 @@ class ProgressBar(object):
                 main = line,
                 size = self._getsizestr()
                 )
- 
+
         if self.curval == self.maxval:
             suffix = u'\n'
         else:
