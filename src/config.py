@@ -17,7 +17,7 @@ class Config(object):
 
         self.windows = False
         self.unix = False
-        self.symlink_allowed = False
+        self.symlink_allowed = True # будем считать, что можно
         self.setmethods()
 
     def setmethods(self):
