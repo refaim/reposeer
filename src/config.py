@@ -34,6 +34,7 @@ class Config(object):
 
                 import pywintypes
                 self.windows = True
+                errmsg = u'Ошибка при обработке файла {0}: {1!s}'
                 
                 # получили версию Windows
                 winver = float('{0[0]}.{0[1]}'.format(sys.getwindowsversion()))
@@ -48,7 +49,7 @@ class Config(object):
                         try:
                             CreateHardLink(dest, src)
                         except pywintypes.error as e:
-                            raise FatalError(errmsg.format(e[2]))
+                            raise FatalError(errmsg.format(src, e[2]))
                             
                 else:
                     hardlink = None
@@ -60,7 +61,7 @@ class Config(object):
                         try:
                             CreateSymbolicLink(dest, src)
                         except pywintypes.error as e:
-                            raise FatalError(errmsg.format(e[2]))
+                            raise FatalError(errmsg.format(src, e[2]))
 
                     # теперь проверим, хватает ли нам привилегий
                     # не стал ковыряться в WinAPI, нашёл готовый модуль
@@ -92,17 +93,19 @@ class Config(object):
         else:
             prefix = u'Ваша операционная система'
 
-        symlink_str = u'мягких (символических)'
-        hardlink_str = u'жёстких'
+        self.method_str = {
+            M_SYMLINK: u'мягких (символических)',
+            M_HARDLINK: u'жёстких'
+        }
 
         self.method_errors = {
-            M_SYMLINK: u'{0} {1}'.format(prefix, suffix.format(symlink_str)),
-            M_HARDLINK: u'{0} {1}'.format(prefix, suffix.format(hardlink_str))
+            M_SYMLINK: u'{0} {1}'.format(prefix, suffix.format(self.method_str[M_SYMLINK])),
+            M_HARDLINK: u'{0} {1}'.format(prefix, suffix.format(self.method_str[M_HARDLINK]))
         }
 
         if not self.symlink_allowed:
             self.method_errors[M_SYMLINK] =\
-                u'Недостаточно привилегий для создания {0} ссылок'.format(symlink_str)
+                u'Недостаточно привилегий для создания {0} ссылок'.format(self.method_str[M_SYMLINK])
 
         self.method_descriptions = {
             M_COPY: u'скопировано',
@@ -111,3 +114,21 @@ class Config(object):
             M_HARDLINK: u'созданы жёсткие ссылки'
         }
 
+    def checkfs(self, filemethod):
+        from win32api import GetVolumeInformation
+        from win32file import GetVolumePathName
+    
+        source_volume = GetVolumePathName(self.source)
+        dest_volume = GetVolumePathName(self.dest)
+        if filemethod == M_HARDLINK and source_volume != dest_volume:
+            raise FatalError(u'Нельзя создать на диске {0} жёсткую ссылку на файл с диска {1}'.format(
+                dest_volume, source_volume))
+
+        source_fs = last(GetVolumeInformation(source_volume))
+        dest_fs = last(GetVolumeInformation(dest_volume))
+
+        errmsg = u'Файловая система {0} на диске {1} не является NTFS и не поддерживает создание {2} ссылок'
+        if source_fs != FS_NTFS:
+            raise FatalError(errmsg.format(source_fs, source_volume, self.method_str[filemethod]))
+        if dest_fs != FS_NTFS:
+            raise FatalError(errmsg.format(dest_fs, dest_volume, self.method_str[filemethod]))

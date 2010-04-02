@@ -119,6 +119,15 @@ def main(argv):
     config.source = os.path.abspath(first(args)).decode(config.encoding)
     config.dest = os.path.abspath(second(args)).decode(config.encoding)
 
+    # проверим, поддерживает ли файловая система создание ссылок
+    # в Windows мягкие и жёсткие ссылки можно создавать только на NTFS
+    # (жёсткие — только в пределах одного диска) 
+    if config.windows and options.method in (M_SYMLINK, M_HARDLINK):
+        try:
+            config.checkfs(options.method)
+        except FatalError as e:
+            return error(e.msg)
+
     # проверяем, все ли пути существуют
     if not os.path.isfile(options.filename):
         return error(u'CSV-файл {0} не найден'.format(options.filename))
@@ -215,9 +224,9 @@ def main(argv):
         return error(e.msg)
 
     print(u'Обработано: {0} ({1})'.format(processed.count, bytes_to_human(processed.size)))
-    print(u'Пропущено дублей при добавлении: {0} ({1})'.format(duplicate.count, bytes_to_human(duplicate.size)))
     print(u'Добавлено в репозиторий ({0}): {1} ({2})'.format(
         config.method_descriptions[options.method], added.count, bytes_to_human(added.size)))
+    print(u'Пропущено дублей при добавлении: {0} ({1})'.format(duplicate.count, bytes_to_human(duplicate.size)))
 
     return 0
 

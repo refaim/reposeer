@@ -1,0 +1,4 @@
+# definition for CMake preprocessor
+# automatically generates version.py
+
+APP_VERSION = @APP_VERSION@
