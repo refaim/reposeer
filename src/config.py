@@ -30,8 +30,10 @@ class Config(object):
             self.unix = True
         except ImportError:
             # а в Windows уже сложнее
-            if sys.platform == 'win32':
-
+            if sys.platform != 'win32':
+                # ничего не нашли, работаем непонятно где
+                hardlink = symlink = None
+            else:
                 import pywintypes
                 self.windows = True
                 errmsg = u'Ошибка при обработке файла {0}: {1!s}'
@@ -42,7 +44,9 @@ class Config(object):
                 WINDOWS_2000 = 5.0
                 WINDOWS_VISTA = 6.0
 
-                if winver >= WINDOWS_2000:
+                if winver < WINDOWS_2000:
+                    hardlink = None
+                else:
                     from win32file import CreateHardLink
 
                     def hardlink(src, dest):
@@ -50,11 +54,10 @@ class Config(object):
                             CreateHardLink(dest, src)
                         except pywintypes.error as e:
                             raise FatalError(errmsg.format(src, e[2]))
-                            
-                else:
-                    hardlink = None
 
-                if winver >= WINDOWS_VISTA:
+                if winver < WINDOWS_VISTA:
+                    symlink = None
+                else:
                     from win32file import CreateSymbolicLink
 
                     def symlink(src, dest):
@@ -73,13 +76,6 @@ class Config(object):
                     else:
                         symlink = None
                         self.symlink_allowed = False
-
-                else:
-                    symlink = None
-
-            else:
-                # ничего не нашли, работаем непонятно где
-                hardlink = symlink = None
 
         self.methods = {
             M_COPY: shutil.copyfile,
