@@ -7,6 +7,7 @@ import sys
 import os
 import csv
 import hashlib
+import shutil
 
 from const import *
 from common import *
