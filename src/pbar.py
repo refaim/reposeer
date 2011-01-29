@@ -31,8 +31,10 @@ class ProgressBar(object):
             self.set(self.maxval)
 
     def _getbarstr(self):
-        return (u'=' * int(self.percentage() * (self.width / 100.0))
-                + u'>').ljust(self.width)
+        result = u'=' * int(self.percentage() * (self.width / 100.0))
+        if self.curval != self.maxval:
+            result += u'>'
+        return result.ljust(self.width)
 
     def _getsizestr(self):
         fmt = u'[{cur} / {max}]'
