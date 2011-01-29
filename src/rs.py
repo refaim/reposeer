@@ -5,231 +5,198 @@ from __future__ import print_function
 
 import sys
 import os
-import csv
 import hashlib
 import shutil
+import optparse
+import traceback
 
-from const import *
-from common import *
-from config import Config
+import loader
+from version import APP_VERSION
+from common import ReposeerException, dirsize, bytes_to_human
 from pbar import ProgressBar
-from cmd import OptionParser, OptionFormatter, OptionError
+from config import *
 
-try:
-    config = Config()
-except FatalError as e:
-    sys.exit(error(e.msg))
+
+APP_AUTHOR = 'Roman Kharitonov'
+APP_AUTHOR_MAIL = 'refaim.vl@gmail.com'
+APP_URL = 'http://github.com/refaim/reposeer'
+
+APP_LONG_NAME = 'Reposeer'
+APP_SHORT_NAME = 'rs'
+
+APP_VERSION_STRING = '{0} {1} by {2} ({3})'.format(
+    APP_LONG_NAME, APP_VERSION, APP_AUTHOR, APP_AUTHOR_MAIL)
+
+CHECK_PROGRESS_DIVIDER = 300.0
+MD5_READ_BLOCK_SIZE = 2 ** 20 # one mbyte
+
+
+class ProgressCounter(object):
+    def __init__(self):
+        self.count, self.size = 0, 0
+
+    def add(self, size):
+        self.count += 1
+        self.size += size
 
 def error(message):
-    message = u'{0}: {1}'.format(APP_SHORT_NAME, message)
-    print(message)
+    print(u'{0}: {1}'.format(APP_SHORT_NAME, message))
     return 1
 
-def md5hash(path):
-    ''' Считает md5-хеш файла и возвращает его строковое представление в нижнем регистра '''
+def process(src, dst, options):
+    errmsg = u'Error while processing file {0}'.format(src) + u':\n{0!s}'
     try:
-        with open(path, 'rb') as fobject:
-            hobj = hashlib.md5()
-            block = fobject.read(MD5_READ_BLOCK_SIZE)
-            while nonempty(block):
-                hobj.update(block)
-                block = fobject.read(MD5_READ_BLOCK_SIZE)
-    except IOError as e:
-        raise FatalError(u'Ошибка при чтении файла {0}: {1!s}'.format(path, e))
+        src = os.path.join(config.src, src)
+        dst = os.path.join(config.dst, dst)
+        if not os.path.isdir(os.path.dirname(dst)):
+            os.makedirs(os.path.dirname(dst))
+        duplicate = os.path.isfile(dst)
+        try:
+            if not duplicate:
+                config.methods[options.method](src, dst)
+            elif options.remove_duplicates:
+                os.remove(src)
+        except OSError, ex:
+            raise ReposeerException(errmsg.format(traceback.format_exc()))
+    except IOError, ex:
+        raise ReposeerException(errmsg.format(traceback.format_exc()))
+    return duplicate
+
+def md5hash(path):
+    ''' Считает md5-хеш файла и возвращает его строковое представление в нижнем регистре '''
+    with open(path, 'rb') as fobj:
+        hobj = hashlib.md5()
+        block = fobj.read(MD5_READ_BLOCK_SIZE)
+        while block:
+            hobj.update(block)
+            block = fobj.read(MD5_READ_BLOCK_SIZE)
     return hobj.hexdigest().lower()
 
-def loadlibgen(csvname):
-    ''' Загружает в память csv-файл с базой Library Genesis и возвращает словарь,
-    где ключ — md5-хеш файла (строка в нижнем регистре), а значение — кортеж (путь к файлу, размер файла) '''
+def main():
+    global config
+    oparser = optparse.OptionParser(
+        usage='%prog [options] <source> <destination>',
+        version=APP_VERSION_STRING,
+        prog=APP_SHORT_NAME)
+    oparser.disable_interspersed_args()
 
-    try:
-        with open(csvname) as csvfile:
-            # инициализируем прогрессбар
-            pbar = ProgressBar(maxval=len(open(csvname).readlines()))
-            csvfile.seek(0)
+    oparser.add_option('-m', '--method', dest='method', default=M_COPY,
+        help='file processing method ({0})'.format('|'.join(config.methods)))
+    oparser.add_option('-r', '--remove-empty', action='store_true',
+        dest='remove_empty', default=False, help='remove empty directories')
+    oparser.add_option('', '--remove-duplicates', action='store_true',
+        dest='remove_duplicates', default=False,
+        help='remove files that already exist in repository')
+    oparser.add_option('', '--csv', dest='csv', metavar='FILENAME', default='libgen.csv',
+        help='path to csv (%default)')
 
-            data = csv.reader(csvfile, delimiter=',', quotechar='"')
-            # определяем, есть ли в файле заголовок
-            # формат csv: путь, размер, md5
-            try:
-                # пытаемся преобразовать размер к целому числа
-                int(second(data.next()))
-            except ValueError:
-                # нашли заголовок, стоим уже на второй строке
-                pass
-            else:
-                # заголовка нет, идём обратно
-                csvfile.seek(0)
+    optgroup = optparse.OptionGroup(oparser, "DB connection options")
+    optgroup.add_option('', '--db-host', default='localhost', help='DB host (%default)')
+    optgroup.add_option('', '--db-name', default='bookwarrior', help='DB name (%default)')
+    optgroup.add_option('', '--db-user', help='DB user')
+    optgroup.add_option('', '--db-passwd', metavar='PASSWD', default='', help='DB password (empty)')
+    oparser.add_option_group(optgroup)
 
-            print(u'Загружаем в память базу Library Genesis...')
 
-            # заполняем словарь
-            library = {}
-            values = ((os.path.normpath(first(entry)), int(second(entry)), third(entry)) for entry in data)
-            for name, size, md5 in values:
-                library[md5.lower()] = (name, size)
-
-                # если выводить прогресс на каждом шаге, получается очень медленно
-                # поэтому будем обновляться каждый CSV_LOAD_DISPLAY_RATE'ый шаг
-                if data.line_num % CSV_LOAD_DISPLAY_RATE == 0:
-                    pbar.set(data.line_num)
-
-            pbar.finish()
-    except Exception as e:
-        raise FatalError(u'Не удалось загрузить CSV-файл: {0!s}'.format(e))
-
-    return library
-
-def main(argv):
-
-    # инициализируем парсер опций командной строки
-    parser_usage = u'%prog [опции] <источник> <приёмник>'
-    parser = OptionParser(parser_usage, version=APP_VERSION_STRING, prog=APP_SHORT_NAME,
-        formatter=OptionFormatter(APP_VERSION, APP_LONG_NAME), add_help_option=False)
-    parser.disable_interspersed_args()
-
-    def usage():
-        # временное решение (пока нету gettext)
-        print(parser.format_help()[:-1].replace('Options', u'Опции'))
-        return 0
-
-    parser.add_option('-h', '--help', action='store_true', dest='help', default=False,
-        help=u'показать это сообщение и выйти')
-    parser.add_option('-c', '--csv', dest='filename', default='libgen.csv', help=u'путь к CSV-файлу')
-    parser.add_option('-m', '--method', dest='method', default=M_COPY,
-        help=u'метод обработки файлов (' + u'|'.join(config.methods.keys()) + ')')
-    parser.add_option('-r', '--remove-empty', action='store_true', dest='remove_empty', default=False,
-        help=u'удалять пустые обработанные каталоги')
-
-    try:
-        (options, args) = parser.parse_args()
-    except OptionError as e:
-        return error(e.msg)
-
-    if empty(args) or options.help:
-        return usage()
+    (options, args) = oparser.parse_args()
     if len(args) != 2:
-        return error(u'Количество аргументов не равно двум (источник и приёмник)')
-
+        oparser.error('Wrong number of arguments')
     if options.method not in config.methods:
-        return error(u'Неверный аргумент у опции --method')
+        oparser.error(u'Unknown file processing method "{0}"'.format(options.method))
     if config.methods[options.method] is None:
-        return error(config.method_errors[options.method])
+        return error(config.get_error_message(options.method))
 
-    # источник и приёмник
-    config.source = os.path.abspath(first(args)).decode(config.encoding)
-    config.dest = os.path.abspath(second(args)).decode(config.encoding)
+    config.src, config.dst = (os.path.abspath(arg).decode(config.encoding)
+        for arg in args)
+
+    if not os.path.isdir(config.src):
+        return error(u'Directory {0} not found'.format(config.src))
+    if not os.path.isdir(config.dst):
+        return error(u'Directory {0} not found'.format(config.dst))
+
+    if not os.access(config.src, os.R_OK):
+        return error(u'Not enough rights for reading from %s' % config.src)
+    if ((options.remove_empty or options.remove_duplicates or options.method == M_MOVE)
+        and not os.access(config.src, os.W_OK)
+    ):
+        return error(u'Not enough rights for writing to %s' % config.src)
+    if not os.access(config.dst, os.W_OK):
+        return error(u'Not enough rights for writing to %s' % config.dst)
 
     # проверим, поддерживает ли файловая система создание ссылок
     # в Windows мягкие и жёсткие ссылки можно создавать только на NTFS
-    # (жёсткие — только в пределах одного диска) 
+    # (жёсткие — только в пределах одного диска)
     if config.windows and options.method in (M_SYMLINK, M_HARDLINK):
-        try:
-            config.checkfs(options.method)
-        except FatalError as e:
-            return error(e.msg)
+        message = config.checkfs(options.method)
+        if message:
+            return error(message)
 
-    # проверяем, все ли пути существуют
-    if not os.path.isfile(options.filename):
-        return error(u'CSV-файл {0} не найден'.format(options.filename))
-    if not os.path.isdir(config.source):
-        return error(u'Директория {0} не найдена'.format(config.source))
-    if not os.path.isdir(config.dest):
-        return error(u'Директория {0} не найдена'.format(config.dest))
+    if options.db_user:
+        worker = loader.DBLoader(options.db_host, options.db_name, options.db_user, options.db_passwd)
+    else:
+        if not os.path.isfile(options.csv):
+            return error(u'{0} not found'.format(options.csv))
+        worker = loader.CSVLoader(options.csv)
 
-    if not os.access(config.source, os.R_OK):
-        return error(u'Недостаточно привилегий для чтения из ' + config.source)
-    if (options.method == M_MOVE or options.remove_empty) and not os.access(config.source, os.W_OK):
-        return error(u'Недостаточно привилегий для записи в ' + config.source)
-    if not os.access(config.dest, os.W_OK):
-        return error(u'Недостаточно привилегий для записи в ' + config.dest)
-
+    print('Loading Library Genesis...')
     try:
-        # загружаем базу
-        library = loadlibgen(options.filename) # library[md5] == (filename, size)
-        libsizes = set(second(value) for value in library.values())
+        library = worker.load()
+    except Exception, ex:
+        raise ReposeerException(
+            'Error while loading library:\n{0}'.format(traceback.format_exc()))
+    library_filesizes = set(value[1] for value in library.values())
+    print('{0} books loaded'.format(len(library)))
 
-        print(u'Оцениваем общий размер анализируемых файлов...')
-        source_size = dirsize(config.source)
-        print(bytes_to_human(source_size))
+    print('Analyzing total size of files for processing...', end=' ')
+    src_size = dirsize(config.src)
+    print(bytes_to_human(src_size))
+    print('Scanning...')
 
-        def process(source, dest):
-            ''' Обрабатываем (копируем, перемещаем и т.д.) файл '''
-            errmsg = u'Ошибка при обработке файла {0}'.format(source) + u': {0!s}'
-            try:
-                source = os.path.join(config.source, source)
-                dest = os.path.join(config.dest, dest)
+    processed, added, duplicate = ProgressCounter(), ProgressCounter(), ProgressCounter()
+    pbar = ProgressBar(maxval=src_size, displaysize=True, width=40)
+    delta = src_size / CHECK_PROGRESS_DIVIDER
+    for path, dirs, files in os.walk(config.src):
+        for file in files:
+            fullpath = os.path.join(path, file)
+            filesize = os.path.getsize(fullpath)
 
-                # если такой директории ещё нет, то создадим
-                if not os.path.isdir(os.path.dirname(dest)):
-                    os.makedirs(os.path.dirname(dest))
-                
-                duplicate = os.path.isfile(dest)
-                if not duplicate:
-                    try:
-                        config.methods[options.method](source, dest)
-                    except OSError as e:
-                        raise FatalError(errmsg.format(e))
-            except IOError as e:
-               raise FatalError(errmsg.format(e))
-            return duplicate
+            # если в базе есть файл такого размера
+            if filesize in library_filesizes:
+                md5 = md5hash(fullpath)
+                # и совпал по хешу
+                if md5 in library:
+                    # то обрабатываем его
+                    already_in_repo = process(fullpath, library[md5][0], options)
+                    if already_in_repo:
+                        duplicate.add(filesize)
+                    else:
+                        added.add(filesize)
 
-        def remove_if_empty(path):
-            if options.remove_empty and dirsize(path) == 0:
-                shutil.rmtree(path)
+            processed.add(filesize)
+            # будем обновлять, только если накопилось достаточно файлов
+            if processed.size - pbar.curval >= delta:
+                pbar.set(processed.size)
 
-        print(u'Обрабатываем...')
+    if options.remove_empty and dirsize(path) == 0:
+        shutil.rmtree(path)
+    pbar.finish()
 
-        class ProgressCounter(object):
-            def __init__(self):
-                self.count, self.size = 0, 0
-
-        processed, added, duplicate = ProgressCounter(), ProgressCounter(), ProgressCounter()
-
-        # инициализируем индикатор прогресса
-        pbar = ProgressBar(maxval=source_size, displaysize=True, width=40)
-        delta = source_size / CHECK_PROGRESS_DIVIDER
-
-        for path, dirs, files in os.walk(config.source):
-            for file in files:
-                fullpath = os.path.join(path, file)
-                filesize = os.path.getsize(fullpath)
-
-                # если в базе есть файл такого размера
-                if filesize in libsizes:
-                    md5 = md5hash(fullpath)
-                    # и совпал по хешу
-                    if md5 in library:
-                        # то обрабатываем его
-                        isduplicate = process(fullpath, first(library[md5]))
-                        if isduplicate:
-                            duplicate.count += 1
-                            duplicate.size += filesize
-                        else:
-                            added.count += 1
-                            added.size += filesize
-
-                processed.count += 1
-                processed.size += filesize
-
-                # будем обновлять, только если накопилось достаточно файлов
-                if processed.size - pbar.curval >= delta:
-                    pbar.set(processed.size)
-        
-            remove_if_empty(path)
-    
-        remove_if_empty(config.source)
-        pbar.finish()
-
-    except FatalError as e:
-        return error(e.msg)
-
-    print(u'Обработано: {0} ({1})'.format(processed.count, bytes_to_human(processed.size)))
-    print(u'Добавлено в репозиторий ({0}): {1} ({2})'.format(
+    print('Processed: {0} ({1})'.format(
+        processed.count, bytes_to_human(processed.size)))
+    print('Added to repository ({0}): {1} ({2})'.format(
         config.method_descriptions[options.method], added.count, bytes_to_human(added.size)))
-    print(u'Пропущено дублей при добавлении: {0} ({1})'.format(duplicate.count, bytes_to_human(duplicate.size)))
+    print('Duplicates {0}: {1} ({2})'.format(
+        'removed' if options.remove_duplicates else 'found',
+        duplicate.count, bytes_to_human(duplicate.size)))
 
     return 0
 
 if __name__ == '__main__':
-    sys.exit(main(sys.argv[1:]))
+    try:
+        config = Config()
+        sys.exit(main())
+    except KeyboardInterrupt:
+        print('Interrupted by user'.ljust(config.terminal_width))
+        sys.exit()
+    except ReposeerException, ex:
+        print(ex.args[0])

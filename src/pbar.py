@@ -3,14 +3,12 @@
 
 import sys
 
-from common import bytes_to_human
+from common import copy_args, bytes_to_human
 
 class ProgressBar(object):
+    @copy_args
     def __init__(self, maxval, fout=sys.stderr, width=50, displaysize=False):
-        self.curval, self.maxval = 0, maxval
-        self.fout = fout
-        self.width = width
-        self.displaysize = displaysize
+        self.curval = 0
 
     def update(self, value):
         assert value <= self.maxval

@@ -1,28 +1,46 @@
 # -*- coding: utf-8 -*-
 
 import os
+import inspect
+import functools
 
-class FatalError(Exception):
-    def __init__(self, msg):
-        self.msg = msg
 
-def first(seq):
-    return seq[0] if seq else None
+class ReposeerException(Exception): pass
 
-def second(seq):
-    return seq[1] if seq and len(seq) >= 2 else None
+def copy_args(func):
+    '''
+        Decorator.
+        Initializes object attributes by the initializer signature.
+        Usage:
 
-def third(seq):
-    return seq[2] if seq and len(seq) >= 3 else None
+        class foo(bar):
+            @copy_args
+            def __init__(self, arg1, arg2): pass
 
-def last(seq):
-    return seq[-1] if seq and nonempty(seq) else None
+        foobar = foo(1, 2)
+        foobar.arg1 == 1 and foobar.arg2 == 2 # True
+    '''
+    argspec = inspect.getargspec(func)
+    argnames = argspec.args[1:]
+    if argspec.defaults:
+        defaults = dict(zip(argnames[-len(argspec.defaults):], argspec.defaults))
+    else:
+        defaults = {}
 
-def empty(seq):
-    return len(seq) == 0
-
-def nonempty(seq):
-    return len(seq) != 0
+    @functools.wraps(func)
+    def __init__(self, *args, **kwargs):
+        args_it = iter(args)
+        for key in argnames:
+            if key in kwargs:
+                value = kwargs[key]
+            else:
+                try:
+                    value = next(args_it)
+                except StopIteration:
+                    value = defaults[key]
+            setattr(self, key, value)
+        func(self, *args, **kwargs)
+    return __init__
 
 def dirsize(path):
     size = 0
@@ -31,16 +49,17 @@ def dirsize(path):
     return size
 
 def bytes_to_human(bytes):
-    bounds = { 1024 ** 5: u'Пбайт',
-               1024 ** 4: u'Тбайт',
-               1024 ** 3: u'Гбайт',
-               1024 ** 2: u'Мбайт',
-               1024:      u'Кбайт',
-               0:         u'байт' }
+    bounds = {
+        1024 ** 4: 'TiB',
+        1024 ** 3: 'GiB',
+        1024 ** 2: 'MiB',
+        1024:      'KiB',
+        0:         'bytes'
+    }
 
     bytes = float(bytes)
     for bound in sorted(bounds.keys(), reverse=True):
         if bytes >= bound:
             if bound != 0:
                 bytes = bytes / bound
-            return u'{0:.2f} {1}'.format(bytes, bounds[bound])
+            return '{0:.2f} {1}'.format(bytes, bounds[bound])

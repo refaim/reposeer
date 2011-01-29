@@ -3,128 +3,108 @@
 import sys
 import shutil
 import locale
+import traceback
 
-from const import *
-from common import *
+import console
+from common import ReposeerException
+
+# file processing methods
+M_COPY = 'copy'
+M_MOVE = 'move'
+M_SYMLINK = 'symlink'
+M_HARDLINK = 'hardlink'
+
+# file systems
+FS_NTFS = 'NTFS'
 
 class Config(object):
-    ''' Класс, содержащий различные параметры, нужные для работы '''
     def __init__(self):
+        self.terminal_width = console.getTerminalWidth()
         self.encoding = locale.getpreferredencoding()
-        self.source = None
-        self.dest = None
-        self.method = None
-
-        self.windows = False
-        self.unix = False
-        self.symlink_allowed = True # будем считать, что можно
-        self.setmethods()
-
-    def setmethods(self):
-        ''' Инициализация методов обработки файлов '''
-
-        # пытаемся обнаружить функции создания жёстких и мягких ссылок
-        try:
-            # в UNIX всё просто
-            from os import link as hardlink, symlink
-            self.unix = True
-        except ImportError:
-            # а в Windows уже сложнее
-            if sys.platform != 'win32':
-                # ничего не нашли, работаем непонятно где
-                hardlink = symlink = None
-            else:
-                import pywintypes
-                self.windows = True
-                errmsg = u'Ошибка при обработке файла {0}: {1!s}'
-                
-                # получили версию Windows
-                winver = float('{0[0]}.{0[1]}'.format(sys.getwindowsversion()))
-
-                WINDOWS_2000 = 5.0
-                WINDOWS_VISTA = 6.0
-
-                if winver < WINDOWS_2000:
-                    hardlink = None
-                else:
-                    from win32file import CreateHardLink
-
-                    def hardlink(src, dest):
-                        try:
-                            CreateHardLink(dest, src)
-                        except pywintypes.error as e:
-                            raise FatalError(errmsg.format(src, e[2]))
-
-                if winver < WINDOWS_VISTA:
-                    symlink = None
-                else:
-                    from win32file import CreateSymbolicLink
-
-                    def symlink(src, dest):
-                        try:
-                            CreateSymbolicLink(dest, src)
-                        except pywintypes.error as e:
-                            raise FatalError(errmsg.format(src, e[2]))
-
-                    # теперь проверим, хватает ли нам привилегий
-                    # не стал ковыряться в WinAPI, нашёл готовый модуль
-                    from check_symlink import enable_symlink_privilege
-
-                    assigned = enable_symlink_privilege()
-                    if assigned:
-                        self.symlink_allowed = True
-                    else:
-                        symlink = None
-                        self.symlink_allowed = False
 
         self.methods = {
             M_COPY: shutil.copyfile,
             M_MOVE: shutil.move,
-            M_HARDLINK: hardlink,
-            M_SYMLINK: symlink }
-
-        suffix = u'не поддерживает создание {0} ссылок на файлы'
-        if self.windows:
-            prefix = u'Ваша версия Windows'
-        else:
-            prefix = u'Ваша операционная система'
-
-        self.method_str = {
-            M_SYMLINK: u'мягких (символических)',
-            M_HARDLINK: u'жёстких'
+            M_HARDLINK: None,
+            M_SYMLINK: None,
         }
-
-        self.method_errors = {
-            M_SYMLINK: u'{0} {1}'.format(prefix, suffix.format(self.method_str[M_SYMLINK])),
-            M_HARDLINK: u'{0} {1}'.format(prefix, suffix.format(self.method_str[M_HARDLINK]))
+        self.link_method_names = {
+            M_HARDLINK: 'hard',
+            M_SYMLINK: 'symbolic',
         }
-
-        if not self.symlink_allowed:
-            self.method_errors[M_SYMLINK] =\
-                u'Недостаточно привилегий для создания {0} ссылок'.format(self.method_str[M_SYMLINK])
-
         self.method_descriptions = {
-            M_COPY: u'скопировано',
-            M_MOVE: u'перемещено',
-            M_SYMLINK: u'созданы мягкие ссылки',
-            M_HARDLINK: u'созданы жёсткие ссылки'
+            M_COPY: 'copied',
+            M_MOVE: 'moved',
+            M_HARDLINK: 'created hard links',
+            M_SYMLINK: 'created symbolic links',
         }
+        self.symlink_allowed = True
 
-    def checkfs(self, filemethod):
+        if 'win32' in sys.platform:
+            self.windows = True
+            self._process_windows()
+        else:
+            try:
+                # UNIX
+                from os import link as hardlink, symlink
+                self.methods[M_HARDLINK] = hardlink
+                self.methods[M_SYMLINK] = symlink
+            except ImportError:
+                # unknown platform
+                pass
+
+    def _process_windows(self):
+        import pywintypes
+        errmsg = u"Error while processing '{0}': {1!s}"
+
+        winver = float('{0[0]}.{0[1]}'.format(sys.getwindowsversion()))
+        WINDOWS_2000 = 5.0
+        WINDOWS_VISTA = 6.0
+
+        if winver >= WINDOWS_2000:
+            from win32file import CreateHardLink
+            def hardlink(src, dst):
+                try:
+                    CreateHardLink(dst, src)
+                except pywintypes.error, e:
+                    raise ReposeerException(errmsg.format(src, e[2]))
+            self.methods[M_HARDLINK] = hardlink
+
+        if winver >= WINDOWS_VISTA:
+            from win32file import CreateSymbolicLink
+            from check_symlink import enable_symlink_privilege
+
+            if enable_symlink_privilege():
+                def symlink(src, dst):
+                    try:
+                        CreateSymbolicLink(dst, src)
+                    except pywintypes.error, e:
+                        raise ReposeerException(errmsg.format(src, e[2]))
+                self.methods[M_SYMLINK] = symlink
+            else:
+                self.symlink_allowed = False
+
+    def get_error_message(self, method):
+        unsupported = 'Your operating system does not support {0} links'
+        if method == M_SYMLINK and not self.symlink_allowed:
+            return 'Not enough rights to create symbolic links'
+        else:
+            return unsupported.format(self.link_method_names[method])
+
+    def checkfs(self, method):
         from win32api import GetVolumeInformation
         from win32file import GetVolumePathName
-    
-        source_volume = GetVolumePathName(self.source)
-        dest_volume = GetVolumePathName(self.dest)
-        if filemethod == M_HARDLINK and source_volume != dest_volume:
-            raise FatalError(u'Нельзя создать на диске {0} жёсткую ссылку на файл с диска {1}'.format(
-                dest_volume, source_volume))
 
-        source_fs = last(GetVolumeInformation(source_volume))
-        dest_fs = last(GetVolumeInformation(dest_volume))
+        src_volume = GetVolumePathName(self.src)
+        dst_volume = GetVolumePathName(self.dst)
+        if method == M_HARDLINK and src_volume != dst_volume:
+            return 'Hard links can be created only within a single logical drive'
 
-        errmsg = u'Файловая система {0} на диске {1} не является NTFS и не поддерживает создание {2} ссылок'
-        if source_fs != FS_NTFS:
-            raise FatalError(errmsg.format(source_fs, source_volume, self.method_str[filemethod]))
-        if dest_fs != FS_NTFS:
-            raise FatalError(errmsg.format(dest_fs, dest_volume, self.method_str[filemethod]))
+        errmsg = 'File system on drive {0} does not support {0} links'
+        src_fs = GetVolumeInformation(src_volume)[-1]
+        dst_fs = GetVolumeInformation(dst_volume)[-1]
+        if src_fs != FS_NTFS:
+            return errmsg.format(src_volume, self.link_method_names[method])
+        if dst_fs != FS_NTFS:
+            return errmsg.format(dst_volume, self.link_method_names[method])
+        return None
