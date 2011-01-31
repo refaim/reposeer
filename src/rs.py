@@ -139,12 +139,7 @@ def main():
         worker = loader.CSVLoader(options.csv)
 
     print('Loading Library Genesis...')
-    try:
-        library = worker.load()
-    except ReposeerException:
-        raise
-    except:
-        raise ReposeerException(u'Error while loading library:\n' + traceback.format_exc())
+    library = worker.load()
     library_filesizes = set(value[1] for value in library.values())
     print('{0} books loaded'.format(len(library)))
 
