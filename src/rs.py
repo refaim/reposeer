@@ -141,9 +141,10 @@ def main():
     print('Loading Library Genesis...')
     try:
         library = worker.load()
-    except Exception, ex:
-        raise ReposeerException(
-            'Error while loading library:\n{0}'.format(traceback.format_exc()))
+    except ReposeerException:
+        raise
+    except:
+        raise ReposeerException(u'Error while loading library:\n' + traceback.format_exc())
     library_filesizes = set(value[1] for value in library.values())
     print('{0} books loaded'.format(len(library)))
 

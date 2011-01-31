@@ -4,7 +4,7 @@ import csv
 import MySQLdb
 
 from pbar import ProgressBar
-from common import copy_args
+from common import ReposeerException, copy_args
 
 PROGRESSBAR_UPDATE_INTERVAL = 10000
 
@@ -42,7 +42,10 @@ class DBLoader(object):
         pass
 
     def load(self):
-        conn = MySQLdb.connect(host=self.host, db=self.name, user=self.user, passwd=self.passwd, use_unicode=True)
+        try:
+            conn = MySQLdb.connect(host=self.host, db=self.name, user=self.user, passwd=self.passwd, use_unicode=True)
+        except MySQLdb.OperationalError, ex:
+            raise ReposeerException(u'MySQL error: %s' % ex.args[1])
         cursor = conn.cursor()
         cursor.execute("SELECT Filename, Filesize, MD5 FROM updated WHERE Filename != ''")
         library = {}
