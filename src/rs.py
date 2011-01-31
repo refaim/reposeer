@@ -45,6 +45,7 @@ def error(message):
     return 1
 
 def process(src, dst, options):
+    global config, log
     errmsg = u'Error while processing file {0}'.format(src) + u':\n{0!s}'
     try:
         src = os.path.normpath(os.path.join(config.src, src))
@@ -82,7 +83,7 @@ def md5hash(path):
     return hobj.hexdigest().lower()
 
 def main():
-    global config
+    global config, log
     oparser = optparse.OptionParser(
         usage='%prog [options] <source> <destination>',
         version=APP_VERSION_STRING,
