@@ -154,7 +154,7 @@ def main():
     print('Scanning...')
 
     processed, added, duplicate = ProgressCounter(), ProgressCounter(), ProgressCounter()
-    pbar = ProgressBar(maxval=src_size, displaysize=True, width=40)
+    pbar = ProgressBar(maxval=src_size, displaysize=True)
     delta = src_size / CHECK_PROGRESS_DIVIDER
     for path, dirs, files in os.walk(config.src):
         for file in files:

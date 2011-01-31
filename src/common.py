@@ -54,7 +54,7 @@ def bytes_to_human(bytes):
         1024 ** 3: 'GiB',
         1024 ** 2: 'MiB',
         1024:      'KiB',
-        0:         'bytes'
+        0:         'b'
     }
 
     bytes = float(bytes)

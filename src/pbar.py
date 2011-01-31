@@ -3,12 +3,21 @@
 
 import sys
 
+import console
 from common import copy_args, bytes_to_human
 
 class ProgressBar(object):
     @copy_args
-    def __init__(self, maxval, fout=sys.stderr, width=50, displaysize=False):
+    def __init__(self, maxval, fout=sys.stderr, width=None, displaysize=False):
         self.curval = 0
+        self.terminal_width = console.getTerminalWidth()
+        if self.width is None:
+            # '[===...===] X%\n'
+            # length of _getbarstr()
+            self.width = self.terminal_width - len('[]') - len(' 100%\n')
+            if self.displaysize:
+                # subtract max length of size string
+                self.width -= len(' [1023.99 GiB / 9999.99 TiB]')
 
     def update(self, value):
         assert value <= self.maxval
@@ -52,11 +61,16 @@ class ProgressBar(object):
                 )
 
         if self.curval == self.maxval:
-            suffix = u'\n'
+            ending = u'\n'
         else:
-            suffix = u'\r'
+            ending = u'\r'
+        line = line.ljust(self.terminal_width - len(ending)) + ending
 
-        self.fout.write((line.ljust(max(len(line), 79)) + suffix).encode(self.fout.encoding))
+        # encoding is None if output redirected to a file
+        if self.fout.encoding:
+            line = line.encode(self.fout.encoding)
+
+        self.fout.write(line)
         self.fout.flush()
 
     def percentage(self):
