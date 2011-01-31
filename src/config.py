@@ -44,6 +44,7 @@ class Config(object):
             self.windows = True
             self._process_windows()
         else:
+            self.windows = False
             try:
                 # UNIX
                 from os import link as hardlink, symlink
