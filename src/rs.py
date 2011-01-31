@@ -46,8 +46,8 @@ def error(message):
 def process(src, dst, options):
     errmsg = u'Error while processing file {0}'.format(src) + u':\n{0!s}'
     try:
-        src = os.path.join(config.src, src)
-        dst = os.path.join(config.dst, dst)
+        src = os.path.normpath(os.path.join(config.src, src))
+        dst = os.path.normpath(os.path.join(config.dst, dst))
         duplicate = os.path.isfile(dst)
         if options.dry_run:
             return duplicate
@@ -144,7 +144,7 @@ def main():
         worker = loader.DBLoader(options.db_host, options.db_name, options.db_user, options.db_passwd)
     else:
         if not os.path.isfile(options.csv):
-            return error(u'{0} not found'.format(options.csv))
+            return error(u'File {0} not found'.format(options.csv))
         worker = loader.CSVLoader(options.csv)
 
     print('Loading Library Genesis...')
@@ -202,6 +202,6 @@ if __name__ == '__main__':
         sys.exit(main())
     except KeyboardInterrupt:
         print('Interrupted by user'.ljust(config.terminal_width))
-        sys.exit()
     except ReposeerException, ex:
         print(ex.args[0])
+    sys.exit(1)
