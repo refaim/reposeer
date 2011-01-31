@@ -82,17 +82,23 @@ def main():
         prog=APP_SHORT_NAME)
     oparser.disable_interspersed_args()
 
-    oparser.add_option('-m', '--method', dest='method', default=M_COPY,
-        help='file processing method ({0})'.format('|'.join(config.methods)))
-    oparser.add_option('-r', '--remove-empty', action='store_true',
-        dest='remove_empty', default=False, help='remove empty directories')
-    oparser.add_option('', '--remove-duplicates', action='store_true',
-        dest='remove_duplicates', default=False,
-        help='remove files that already exist in repository')
-    oparser.add_option('', '--csv', dest='csv', metavar='FILENAME', default='libgen.csv',
-        help='path to csv (%default)')
     oparser.add_option('-n', '--dry-run', action='store_true', dest='dry_run', default=False,
         help="don't perform write actions, just simulate")
+
+    optgroup = optparse.OptionGroup(oparser, 'File handling options')
+    optgroup.add_option('-m', '--method', dest='method', default=M_COPY,
+        help='file processing method ({0})'.format('|'.join(config.methods)))
+    optgroup.add_option('-r', '--remove-empty', action='store_true',
+        dest='remove_empty', default=False, help='remove empty directories')
+    optgroup.add_option('', '--remove-duplicates', action='store_true',
+        dest='remove_duplicates', default=False,
+        help='remove files that already exist in repository')
+    oparser.add_option_group(optgroup)
+
+    optgroup = optparse.OptionGroup(oparser, 'CSV options')
+    optgroup.add_option('', '--csv', dest='csv', metavar='FILENAME', default='libgen.csv',
+        help='path to csv (%default)')
+    oparser.add_option_group(optgroup)
 
     optgroup = optparse.OptionGroup(oparser, "DB connection options")
     optgroup.add_option('', '--db-host', default='localhost', help='DB host (%default)')
@@ -100,7 +106,6 @@ def main():
     optgroup.add_option('', '--db-user', help='DB user')
     optgroup.add_option('', '--db-passwd', metavar='PASSWD', default='', help='DB password (empty)')
     oparser.add_option_group(optgroup)
-
 
     (options, args) = oparser.parse_args()
     if len(args) != 2:
