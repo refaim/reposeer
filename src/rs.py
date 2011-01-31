@@ -9,11 +9,12 @@ import hashlib
 import shutil
 import optparse
 import traceback
+import logging
 
 import loader
 from version import APP_VERSION
 from common import ReposeerException, dirsize, bytes_to_human
-from pbar import ProgressBar
+from pbar import ProgressBar, ProgressBarSafeLogger
 from config import *
 
 
@@ -49,15 +50,21 @@ def process(src, dst, options):
         src = os.path.normpath(os.path.join(config.src, src))
         dst = os.path.normpath(os.path.join(config.dst, dst))
         duplicate = os.path.isfile(dst)
-        if options.dry_run:
-            return duplicate
-        if not os.path.isdir(os.path.dirname(dst)):
-            os.makedirs(os.path.dirname(dst))
+        if not options.dry_run:
+            dstdir = os.path.dirname(dst)
+            if not os.path.isdir(dstdir):
+                os.makedirs(dstdir)
         try:
             if not duplicate:
-                config.methods[options.method](src, dst)
+                if options.verbose:
+                    log.info(u'Performing %s: %s -> %s', options.method, src, dst)
+                if not options.dry_run:
+                    config.methods[options.method](src, dst)
             elif options.remove_duplicates:
-                os.remove(src)
+                if options.verbose:
+                    log.info(u'Removing %s', src)
+                if not options.dry_run:
+                    os.remove(src)
         except OSError, ex:
             raise ReposeerException(errmsg.format(traceback.format_exc()))
     except IOError, ex:
@@ -84,6 +91,10 @@ def main():
 
     oparser.add_option('-n', '--dry-run', action='store_true', dest='dry_run', default=False,
         help="don't perform write actions, just simulate")
+    oparser.add_option('', '--verbose', action='store_true', dest='verbose', default=False,
+        help="show operations log")
+    oparser.add_option('', '--no-progressbar', action='store_false', dest='pbar', default=True,
+        help="don't show progress bar")
 
     optgroup = optparse.OptionGroup(oparser, 'File handling options')
     optgroup.add_option('-m', '--method', dest='method', default=M_COPY,
@@ -148,7 +159,7 @@ def main():
         worker = loader.CSVLoader(options.csv)
 
     print('Loading Library Genesis...')
-    library = worker.load()
+    library = worker.load(options.pbar)
     library_filesizes = set(value[1] for value in library.values())
     print('{0} books loaded'.format(len(library)))
 
@@ -158,7 +169,8 @@ def main():
     print('Scanning...')
 
     processed, added, duplicate = ProgressCounter(), ProgressCounter(), ProgressCounter()
-    pbar = ProgressBar(maxval=src_size, displaysize=True)
+    pbar = ProgressBar(maxval=src_size, displaysize=True, enabled=options.pbar)
+    log.set_pbar(pbar)
     delta = src_size / CHECK_PROGRESS_DIVIDER
     for path, dirs, files in os.walk(config.src):
         for file in files:
@@ -185,6 +197,7 @@ def main():
             shutil.rmtree(path)
 
     pbar.finish()
+    log.unset_pbar()
 
     print('Processed: {0} ({1})'.format(
         processed.count, bytes_to_human(processed.size)))
@@ -198,6 +211,8 @@ def main():
 
 if __name__ == '__main__':
     try:
+        logging.basicConfig(level=logging.INFO)
+        log = ProgressBarSafeLogger(logging.getLogger())
         config = Config()
         sys.exit(main())
     except KeyboardInterrupt:

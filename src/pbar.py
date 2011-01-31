@@ -6,9 +6,10 @@ import sys
 import console
 from common import copy_args, bytes_to_human
 
+
 class ProgressBar(object):
     @copy_args
-    def __init__(self, maxval, fout=sys.stderr, width=None, displaysize=False):
+    def __init__(self, maxval, fout=sys.stderr, width=None, displaysize=False, enabled=True):
         self.curval = 0
         self.terminal_width = console.getTerminalWidth()
         if self.width is None:
@@ -50,6 +51,8 @@ class ProgressBar(object):
             max = bytes_to_human(self.maxval))
 
     def _write(self):
+        if not self.enabled:
+            return
         line = u'[{bar}] {prc}%'.format(
             bar = self._getbarstr(),
             prc = self.percentage()
@@ -75,3 +78,39 @@ class ProgressBar(object):
 
     def percentage(self):
         return int(self.curval / float(self.maxval) * 100.0)
+
+    def clear(self):
+        '(Temporarily) clear progress bar off screen, e.g. to write log line.'
+        if not self.enabled:
+            return
+        self.fout.write(' ' * (self.terminal_width - len('\r')) + '\r')
+        self.fout.flush()
+
+
+class ProgressBarSafeLogger(object):
+    'Wraps logger to clear progress bar before logging something.'
+    @copy_args
+    def __init__(self, log, pbar=None):
+        pass
+
+    def set_pbar(self, pbar):
+        self.pbar = pbar
+
+    def unset_pbar(self):
+        self.pbar = None
+
+    def debug(self, *args, **kw):
+        self.pbar.clear()
+        self.log.debug(*args, **kw)
+
+    def info(self, *args, **kw):
+        self.pbar.clear()
+        self.log.info(*args, **kw)
+
+    def warning(self, *args, **kw):
+        self.pbar.clear()
+        self.warning.info(*args, **kw)
+
+    def error(self, *args, **kw):
+        self.pbar.clear()
+        self.error.info(*args, **kw)

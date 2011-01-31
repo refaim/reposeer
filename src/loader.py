@@ -13,9 +13,9 @@ class CSVLoader(object):
     def __init__(self, filename):
         self.fieldnames = ('filename', 'filesize', 'md5')
 
-    def load(self):
+    def load(self, pbar_enabled):
         fobj = open(self.filename)
-        pbar = ProgressBar(maxval=len(fobj.readlines()))
+        pbar = ProgressBar(maxval=len(fobj.readlines()), enabled=pbar_enabled)
         fobj.seek(0)
         reader = csv.DictReader(fobj, fieldnames=self.fieldnames)
 
@@ -41,7 +41,7 @@ class DBLoader(object):
     def __init__(self, host, name, user, passwd):
         pass
 
-    def load(self):
+    def load(self, pbar_enabled):
         try:
             conn = MySQLdb.connect(host=self.host, db=self.name, user=self.user, passwd=self.passwd, use_unicode=True)
         except MySQLdb.OperationalError, ex:
