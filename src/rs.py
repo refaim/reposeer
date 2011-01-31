@@ -48,9 +48,11 @@ def process(src, dst, options):
     try:
         src = os.path.join(config.src, src)
         dst = os.path.join(config.dst, dst)
+        duplicate = os.path.isfile(dst)
+        if options.dry_run:
+            return duplicate
         if not os.path.isdir(os.path.dirname(dst)):
             os.makedirs(os.path.dirname(dst))
-        duplicate = os.path.isfile(dst)
         try:
             if not duplicate:
                 config.methods[options.method](src, dst)
@@ -89,6 +91,8 @@ def main():
         help='remove files that already exist in repository')
     oparser.add_option('', '--csv', dest='csv', metavar='FILENAME', default='libgen.csv',
         help='path to csv (%default)')
+    oparser.add_option('-n', '--dry-run', action='store_true', dest='dry_run', default=False,
+        help="don't perform write actions, just simulate")
 
     optgroup = optparse.OptionGroup(oparser, "DB connection options")
     optgroup.add_option('', '--db-host', default='localhost', help='DB host (%default)')
@@ -172,7 +176,7 @@ def main():
             # будем обновлять, только если накопилось достаточно файлов
             if processed.size - pbar.curval >= delta:
                 pbar.set(processed.size)
-        if options.remove_empty and dirsize(path) == 0:
+        if not options.dry_run and options.remove_empty and dirsize(path) == 0:
             shutil.rmtree(path)
 
     pbar.finish()
