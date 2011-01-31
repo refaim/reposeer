@@ -176,9 +176,9 @@ def main():
             # будем обновлять, только если накопилось достаточно файлов
             if processed.size - pbar.curval >= delta:
                 pbar.set(processed.size)
+        if options.remove_empty and dirsize(path) == 0:
+            shutil.rmtree(path)
 
-    if options.remove_empty and dirsize(path) == 0:
-        shutil.rmtree(path)
     pbar.finish()
 
     print('Processed: {0} ({1})'.format(
