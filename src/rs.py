@@ -92,7 +92,7 @@ def main():
 
     oparser.add_option('-n', '--dry-run', action='store_true', dest='dry_run', default=False,
         help="don't perform write actions, just simulate")
-    oparser.add_option('', '--verbose', action='store_true', dest='verbose', default=False,
+    oparser.add_option('-v', '--verbose', action='store_true', dest='verbose', default=False,
         help="show operations log")
     oparser.add_option('', '--no-progressbar', action='store_false', dest='pbar', default=True,
         help="don't show progress bar")
