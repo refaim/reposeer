@@ -88,7 +88,6 @@ def main():
         usage='%prog [options] <source> <destination>',
         version=APP_VERSION_STRING,
         prog=APP_SHORT_NAME)
-    oparser.disable_interspersed_args()
 
     oparser.add_option('-n', '--dry-run', action='store_true', dest='dry_run', default=False,
         help="don't perform write actions, just simulate")
